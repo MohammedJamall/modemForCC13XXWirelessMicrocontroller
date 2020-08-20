@@ -1,0 +1,155 @@
+
+
+//////////////////////////////////// @ done by Mohammed Jamal //////////////////////////////////////
+
+using namespace std;
+#include <iostream>
+#include <string>
+#include <vector>
+#include <utility>
+#include <stdio.h>
+#include<cstdint>
+#include <iostream>     
+#include <cassert>
+
+///////////////////@Definitions ////////////////////////////////////////////////////////////////////
+
+#define CRC16_POLY  0x8005
+#define CRC_INIT    0xFFFF
+#define byteSize 8
+  
+unsigned int valueOf(const std::string &substring);
+void deBin(const std::string &rx);
+using Match = std::pair<std::string::size_type, std::string>;
+using MatchVec = std::vector<Match>;
+uint16_t calcCRC(std::uint8_t crcData, std::uint16_t crcReg);
+int PacketIndex=0;
+
+///////////////////////////////////////////////////////////////////////////////////////////////////// 
+
+/*
+@param Match = used for saving exctracted string and its first index at a given string .
+@paramPacketIndex=represents the index number of the exctracted string.
+@function calcCRC= Calculates CRC according to our protocol implementation.
+@function Valueof= Calculates the decimal-unsigned int- Byte number of a given 8bit binary string.
+@function debBin=checks the checksum of the given substring.
+@function findPattern=finds the substring in a given string.
+@Template countof=used for counting the sizeof unsigned int dynamically in an issue of converting from unsigned int to unit8.
+*/
+
+template <typename T, unsigned  N>
+    constexpr unsigned countof(T const (&)[N]) noexcept
+    {
+    return N;
+    }
+
+ 
+MatchVec findPattern(const std::string &str, const std::string &pattern)
+{
+    MatchVec vec;
+    Match m;
+ 
+ 
+    std::string::size_type index, pos = 0;
+    int DSSS = 4 , numberOfPayloadByte=20, N=0;                                                                                
+    N = numberOfPayloadByte*8*2*DSSS ;
+    while ((index = str.find(pattern, pos)) != std::string::npos) {
+        m.first = index; //start of Syncword
+        index += pattern.length();
+        m.second = str.substr(index,N); // Exctracting the payload from the current Packet.
+        vec.push_back(m);
+        pos = index;
+    }
+ 
+ 
+    return vec;
+}
+
+uint16_t calcCRC(uint8_t crcData, uint16_t crcReg)
+{
+    uint8_t i;
+    for (i = 0; i < 8; i++)
+    {
+        if (((crcReg & 0x8000) >> 8) ^ (crcData & 0x80))
+        {
+            crcReg = (crcReg << 1) ^ CRC16_POLY;
+        }
+        else
+        {
+            crcReg = (crcReg << 1);
+        }
+        crcData <<= 1;
+    }
+    return crcReg;
+}
+
+unsigned int valueOf(const std::string &substring) {
+    char retChar = '\0';
+    std::uint8_t total = 0;
+    int counter = 1;
+    for (int i=byteSize; i>0; i--) {
+        if (substring[i-1] == '1') total += counter;
+        if (substring[i-1] != ' ') counter *= 2;        
+    }
+    return total;
+}
+ 
+void deBin(const std::string &rx) {
+    unsigned int ByteConvertRxBuffer[160] ={0};
+    uint8_t rxBuffer[countof(ByteConvertRxBuffer)];
+    size_t ireal=0;  // notice that last two last bytes are for CRC , this means last two index here are CRC value for CRC0 , CRC1 .
+    uint16_t checksum; // CRC of 2byte i.e 16bits.
+    bool crcOK = false;
+    uint8_t i;
+    checksum = CRC_INIT;
+    std::cout<<"{ ";
+    for (size_t i=0; i<rx.length(); i+=byteSize) { 
+        char nibble[byteSize];
+        for (int j=0; j<byteSize; j++) nibble[j] = rx[i+j];
+        std:: cout<< valueOf(nibble); // prints the value of each Byte-8bit inside each packet , dealing with each packet separately.
+        ByteConvertRxBuffer[ireal++]=valueOf(nibble);
+        if (i+byteSize != rx.length() ) std::cout<<", ";
+    }
+    std:: cout<<"}"<<endl;
+    for(int i=0;i<countof(ByteConvertRxBuffer);i++)
+    {
+        rxBuffer[i]=ByteConvertRxBuffer[i];
+        
+    }
+    for(i = 0; i < sizeof(rxBuffer); i++) 
+    {
+        checksum = calcCRC(rxBuffer[i], checksum);
+        
+    }
+    PacketIndex++;
+    if(checksum == 0)
+    {
+        crcOK = true;
+        std::cout<<"  your packet number "<<PacketIndex<<" :" <<"Valid"<<endl;
+        
+    }
+    else
+    {
+    crcOK = false;
+    std::cout<<"your packet number "<<PacketIndex<<" :" <<"inValid"<<endl;
+        
+    }
+}
+ 
+int main() /*int main(int argc, char** argv){}*/
+{
+    std::string PacketData = 
+"Here paste your Decrypted binary Data Packet(matlab output) -output of variable DecryptedBinarySignal in matlab";
+    std::string SyncWord = "0011001100111100001100111100110011000011110000111100110011001111"; //Inverted Syncword pattern
+    size_t notfound = PacketData.find(SyncWord); 
+    assert(notfound != string::npos) ; //if not found as exit and don't complete. 
+    auto matches = findPattern(PacketData, SyncWord );
+    for(auto &match : matches) {
+        std::cout << "Match found at position: " << match.first << std::endl;
+        std::cout << "String is " << match.second << std::endl;
+        deBin( match.second );
+    }
+    
+    return 0;
+}
+
